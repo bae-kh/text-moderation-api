@@ -1,0 +1,115 @@
+name: Model Smoke Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      sample_text:
+        description: "Text to send to /api/v1/detect"
+        required: false
+        default: "테스트 문장입니다."
+        type: string
+
+jobs:
+  model-smoke-test:
+    name: Run Model Inference Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t hate-speech-api .
+
+      - name: Run Docker container
+        run: |
+          docker run -d --name hate-speech-api-model-smoke -p 8000:8000 hate-speech-api
+
+      - name: Wait for health endpoint
+        run: |
+          for i in {1..90}; do
+            response=$(curl -s http://localhost:8000/api/v1/health || true)
+
+            echo "Attempt $i response: $response"
+
+            if echo "$response" | grep -q '"status":"ok"'; then
+              echo "Health check passed"
+              exit 0
+            fi
+
+            echo "Waiting for server and model startup..."
+            sleep 5
+          done
+
+          echo "Server did not become healthy in time"
+          docker logs hate-speech-api-model-smoke || true
+          exit 1
+
+      - name: Run detect smoke test
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+          import urllib.error
+
+          url = "http://localhost:8000/api/v1/detect"
+          text = os.environ.get("SAMPLE_TEXT", "테스트 문장입니다.")
+
+          payload = json.dumps({"text": text}).encode("utf-8")
+
+          request = urllib.request.Request(
+              url,
+              data=payload,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+
+          try:
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  status_code = response.status
+                  body = response.read().decode("utf-8")
+          except urllib.error.HTTPError as error:
+              body = error.read().decode("utf-8")
+              raise RuntimeError(f"Detect request failed: {error.code}, body={body}") from error
+
+          print("status_code:", status_code)
+          print("body:", body)
+
+          if status_code != 200:
+              raise RuntimeError(f"Expected 200, got {status_code}")
+
+          data = json.loads(body)
+
+          required_fields = [
+              "is_hate_speech",
+              "confidence",
+              "category",
+              "action",
+              "message",
+          ]
+
+          missing_fields = [field for field in required_fields if field not in data]
+          if missing_fields:
+              raise RuntimeError(f"Missing response fields: {missing_fields}")
+
+          if data["action"] not in ["allow", "block", "review"]:
+              raise RuntimeError(f"Unexpected action: {data['action']}")
+
+          print("Model smoke test passed")
+          PY
+        env:
+          SAMPLE_TEXT: ${{ inputs.sample_text }}
+
+      - name: Show Docker logs on failure
+        if: failure()
+        run: |
+          docker logs hate-speech-api-model-smoke || true
+
+      - name: Stop Docker container
+        if: always()
+        run: |
+          docker stop hate-speech-api-model-smoke || true
+          docker rm hate-speech-api-model-smoke || true

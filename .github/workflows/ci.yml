@@ -55,11 +55,15 @@ jobs:
         run: |
           docker run -d --name hate-speech-api-smoke -p 8000:8000 hate-speech-api
 
-      - name: Wait for server startup
+      - name: Wait for health endpoint
         run: |
           for i in {1..60}; do
-            if curl -s http://localhost:8000/api/v1/health; then
-              echo "Server is ready"
+            response=$(curl -s http://localhost:8000/api/v1/health || true)
+
+            echo "Attempt $i response: $response"
+
+            if echo "$response" | grep -q '"status":"ok"'; then
+              echo "Health check passed"
               exit 0
             fi
 
@@ -67,11 +71,17 @@ jobs:
             sleep 5
           done
 
-          echo "Server did not start in time"
-          docker logs hate-speech-api-smoke
+          echo "Health check failed"
+          docker logs hate-speech-api-smoke || true
           exit 1
+
+      - name: Show Docker logs on failure
+        if: failure()
+        run: |
+          docker logs hate-speech-api-smoke || true
 
       - name: Stop Docker container
         if: always()
         run: |
           docker stop hate-speech-api-smoke || true
+          docker rm hate-speech-api-smoke || true
