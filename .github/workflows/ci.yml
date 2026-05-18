@@ -1,5 +1,4 @@
 name: CI
-# Run tests and Docker build on push and pull request
 
 on:
   push:
@@ -39,8 +38,8 @@ jobs:
         run: |
           pytest -v
 
-  docker-build:
-    name: Build Docker Image
+  docker-smoke-test:
+    name: Build and Smoke Test Docker Image
     runs-on: ubuntu-latest
     needs: test
 
@@ -51,3 +50,28 @@ jobs:
       - name: Build Docker image
         run: |
           docker build -t hate-speech-api .
+
+      - name: Run Docker container
+        run: |
+          docker run -d --name hate-speech-api-smoke -p 8000:8000 hate-speech-api
+
+      - name: Wait for server startup
+        run: |
+          for i in {1..60}; do
+            if curl -s http://localhost:8000/api/v1/health; then
+              echo "Server is ready"
+              exit 0
+            fi
+
+            echo "Waiting for server..."
+            sleep 5
+          done
+
+          echo "Server did not start in time"
+          docker logs hate-speech-api-smoke
+          exit 1
+
+      - name: Stop Docker container
+        if: always()
+        run: |
+          docker stop hate-speech-api-smoke || true
