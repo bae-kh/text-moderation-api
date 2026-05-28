@@ -88,3 +88,21 @@ def test_model_predict_runtime_error_triggers_500() -> None:
 
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == "Internal Server Error during model inference."
+
+def test_model_predict_multi_label_output_blocks() -> None:
+    model = HateSpeechModel()
+    model.pipeline = MagicMock(return_value=[
+        [
+            {"label": "clean", "score": 0.03},
+            {"label": "악플/욕설", "score": 0.91},
+            {"label": "기타 혐오", "score": 0.02},
+        ]
+    ])
+
+    result: dict[str, Any] = model.predict("공격적인 댓글 예시")
+
+    assert result["is_hate_speech"] is True
+    assert result["confidence"] == 0.91
+    assert result["category"] == "악플/욕설"
+    assert result["action"] == "block"
+    assert result["message"] == "Message blocked due to harmful content."

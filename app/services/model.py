@@ -21,11 +21,13 @@ class HateSpeechModel:
         """HuggingFace 모델을 메모리에 적재합니다."""
         logger.info(f"Loading model {self.model_name} into memory...")
         try:
+            # pipeline 객체는 서버 시작 시 한 번만 생성한다.
+            # top_k=None + sigmoid를 사용해 inspect_model_output.py와 동일하게 전체 label score를 받는다.
             self.pipeline = hf_pipeline(
                 "text-classification",
                 model=self.model_name,
-                truncation=True,
-                max_length=MODEL_MAX_TOKENS,
+                top_k=None,
+                function_to_apply="sigmoid",
             )
             logger.info("Model loaded successfully.")
         except Exception as e:
@@ -38,13 +40,22 @@ class HateSpeechModel:
             raise RuntimeError("Model is not loaded.")
 
         try:
+            # 이미 load()에서 생성한 pipeline에 text를 넣어 추론한다.
             results = self.pipeline(
                 text,
                 truncation=True,
                 max_length=MODEL_MAX_TOKENS,
             )
 
-            best_result = results[0]
+            # transformers 버전/설정에 따라 결과가
+            # [{"label": ..., "score": ...}, ...]
+            # 또는 [[{"label": ..., "score": ...}, ...]]
+            # 형태로 나올 수 있으므로 정규화한다.
+            if isinstance(results, list) and len(results) > 0 and isinstance(results[0], list):
+                results = results[0]
+
+            best_result = max(results, key=lambda item: item["score"])
+
             label = best_result["label"]
             score = float(best_result["score"])
 
