@@ -3,3 +3,6 @@ __pycache__/
 .pytest_cache/
 load_test_results/*.csv
 !load_test_results/summary.md
+# SQLite runtime database
+moderation.db
+*.db

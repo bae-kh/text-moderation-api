@@ -1,0 +1,28 @@
+﻿[
+    {
+        "id":  2,
+        "text":  "ë°ë³´ê°ì",
+        "is_hate_speech":  true,
+        "category":  "ì\u0085í/ìì¤",
+        "confidence":  0.6500177383422852,
+        "action":  "block",
+        "status":  "resolved",
+        "review_result":  "confirmed_harmful",
+        "review_note":  "ì´ìì ê²í  ê²°ê³¼ ì í´ ííì¼ë¡ íë¨ë¨",
+        "created_at":  "2026-05-28T04:11:26.191968",
+        "updated_at":  "2026-05-28T04:11:30.831203"
+    },
+    {
+        "id":  1,
+        "text":  "ë°ë³´ê°ì",
+        "is_hate_speech":  true,
+        "category":  "ì\u0085í/ìì¤",
+        "confidence":  0.6500177383422852,
+        "action":  "block",
+        "status":  "resolved",
+        "review_result":  "confirmed_harmful",
+        "review_note":  "ì´ìì ê²í  ê²°ê³¼ ì í´ ííì¼ë¡ íë¨ë¨",
+        "created_at":  "2026-05-28T04:06:05.998097",
+        "updated_at":  "2026-05-28T04:07:19.532371"
+    }
+]
