@@ -708,7 +708,299 @@ AI 모델 추론 결과 반환
 이를 통해 단순 모델 서빙 API에서 운영 가능한 AI moderation backend로 한 단계 확장했습니다.
 ---
 
+## Phase 8. Structured Logging
 
+Phase 8에서는 `/api/v1/detect` 요청에 대한 structured logging을 추가했습니다.
+
+이전 단계까지는 API가 정상적으로 동작하고, `block` 또는 `review` 결과를 DB에 저장하는 Review Queue workflow까지 구현했습니다. 하지만 운영 관점에서는 API가 단순히 응답을 반환하는 것만으로는 부족합니다.
+
+운영 중에는 다음과 같은 질문에 답할 수 있어야 합니다.
+
+```text
+특정 요청은 몇 ms 걸렸는가?
+어떤 category로 판단되었는가?
+confidence는 얼마였는가?
+최종 action은 allow/block/review 중 무엇이었는가?
+block/review 결과가 DB에 저장되었는가?
+문제가 발생한 요청의 request_id는 무엇인가?
+입력 길이가 latency에 영향을 주는가?
+```
+
+이를 위해 Phase 8에서는 `/detect` 요청마다 JSON 형태의 structured log를 남기도록 개선했습니다.
+
+---
+
+### Why Structured Logging?
+
+일반 문자열 로그는 사람이 읽기에는 쉽지만, 나중에 검색하거나 집계하기 어렵습니다.
+
+예를 들어 다음과 같은 로그는 사람이 보기에는 괜찮지만, 운영 분석에는 한계가 있습니다.
+
+```text
+Detect request completed successfully
+```
+
+반면 structured logging은 key-value 기반으로 로그를 남깁니다.
+
+```json
+{
+  "event": "detect_completed",
+  "request_id": "7b740556-41ce-4b2c-9201-d9d3a77e203e",
+  "method": "POST",
+  "path": "/api/v1/detect",
+  "status_code": 200,
+  "latency_ms": 23.41,
+  "text_length": 10,
+  "category": "clean",
+  "confidence": 0.9853243231773376,
+  "action": "allow",
+  "stored": false
+}
+```
+
+이렇게 남기면 나중에 다음과 같은 분석이 가능해집니다.
+
+```text
+action=block인 요청만 조회
+latency_ms > 500인 slow request 조회
+category=악플/욕설인 요청 비율 확인
+stored=true인 요청만 확인
+request_id로 특정 요청 추적
+```
+
+즉 Phase 8의 목적은 단순히 로그를 많이 남기는 것이 아니라, 운영 중 추적과 분석이 가능한 형태로 로그를 구조화하는 것입니다.
+
+---
+
+### Logged Fields
+
+Phase 8에서 `/detect` 성공 요청에 대해 남기는 주요 key는 다음과 같습니다.
+
+| Key         | Meaning              |
+| ----------- | -------------------- |
+| event       | 로그 이벤트 이름            |
+| request_id  | 요청 하나를 추적하기 위한 고유 ID |
+| method      | HTTP method          |
+| path        | 요청 endpoint          |
+| status_code | HTTP 응답 상태 코드        |
+| latency_ms  | 요청 처리 시간             |
+| text_length | 입력 텍스트 길이            |
+| category    | 모델이 선택한 top category |
+| confidence  | 모델 confidence score  |
+| action      | 최종 moderation action |
+| stored      | DB 저장 여부             |
+
+예시 로그는 다음과 같습니다.
+
+```json
+{
+  "event": "detect_completed",
+  "request_id": "7b740556-41ce-4b2c-9201-d9d3a77e203e",
+  "method": "POST",
+  "path": "/api/v1/detect",
+  "status_code": 200,
+  "latency_ms": 693.17,
+  "text_length": 4,
+  "category": "악플/욕설",
+  "confidence": 0.7818034291267395,
+  "action": "block",
+  "stored": true
+}
+```
+
+---
+
+### Request ID
+
+Phase 1에서 모든 요청에 `X-Request-ID`를 부여하는 middleware를 추가했습니다. Phase 8에서는 이 request id를 structured log에도 포함했습니다.
+
+```json
+{
+  "request_id": "7b740556-41ce-4b2c-9201-d9d3a77e203e"
+}
+```
+
+서버는 여러 요청을 동시에 처리하기 때문에 로그가 서로 섞일 수 있습니다. 이때 `request_id`가 있으면 특정 요청의 처리 흐름을 추적할 수 있습니다.
+
+예를 들어 클라이언트가 받은 응답 헤더에 다음 값이 있다고 가정합니다.
+
+```text
+X-Request-ID: 7b740556-41ce-4b2c-9201-d9d3a77e203e
+```
+
+운영자는 서버 로그에서 같은 `request_id`를 검색해 해당 요청이 어떻게 처리되었는지 확인할 수 있습니다.
+
+```text
+request_id 검색
+→ latency 확인
+→ category 확인
+→ action 확인
+→ DB 저장 여부 확인
+```
+
+이를 통해 장애 분석과 요청 추적성이 좋아집니다.
+
+---
+
+### Why text_length instead of raw text?
+
+Phase 8에서는 사용자의 원문 `text`를 로그에 남기지 않았습니다.
+
+텍스트 moderation API는 사용자가 입력한 문장이나 신고된 댓글을 다룹니다. 이 원문에는 개인정보, 민감한 표현, 신고 대상 문장 등이 포함될 수 있습니다.
+
+따라서 원문을 로그에 저장하면 다음과 같은 문제가 생길 수 있습니다.
+
+```text
+개인정보 노출 위험
+민감한 텍스트 장기 보관 위험
+로그 접근 권한 관리 부담
+불필요한 원문 저장 증가
+```
+
+대신 `text_length`만 기록했습니다.
+
+```json
+{
+  "text_length": 10
+}
+```
+
+`text_length`를 남기는 이유는 입력 길이와 latency의 관계를 분석하기 위해서입니다.
+
+예를 들어 운영 중 특정 요청이 느릴 때 다음과 같은 질문을 할 수 있습니다.
+
+```text
+느린 요청은 긴 텍스트였는가?
+짧은 텍스트인데도 느렸는가?
+입력 길이 제한 정책이 적절한가?
+긴 입력에 대해 chunking 또는 max token 정책이 필요한가?
+```
+
+원문을 남기지 않더라도 `text_length`를 통해 성능 분석에 필요한 최소 정보는 확보할 수 있습니다.
+
+---
+
+### Stored Field
+
+Phase 7에서는 `allow` 결과는 DB에 저장하지 않고, `block` 또는 `review` 결과만 Review Queue에 저장하도록 설계했습니다.
+
+Phase 8에서는 이 저장 여부를 로그에 `stored`로 남겼습니다.
+
+```json
+{
+  "action": "block",
+  "stored": true
+}
+```
+
+```json
+{
+  "action": "allow",
+  "stored": false
+}
+```
+
+이를 통해 Phase 7의 저장 정책이 실제 요청 처리 중에도 정상적으로 동작하는지 확인할 수 있습니다.
+
+예를 들어 다음과 같은 로그가 나온다면 이상 징후입니다.
+
+```json
+{
+  "action": "block",
+  "stored": false
+}
+```
+
+`block`은 저장되어야 하는데 저장되지 않았다는 뜻이기 때문입니다.
+
+따라서 `stored`는 Review Queue workflow가 실제로 연결되었는지 관측하기 위한 key입니다.
+
+---
+
+### Success and Failure Events
+
+성공 로그는 `detect_completed` 이벤트로 남깁니다.
+
+```json
+{
+  "event": "detect_completed",
+  "request_id": "7b740556-41ce-4b2c-9201-d9d3a77e203e",
+  "status_code": 200,
+  "latency_ms": 23.41,
+  "category": "clean",
+  "confidence": 0.9853243231773376,
+  "action": "allow",
+  "stored": false
+}
+```
+
+실패 로그는 `detect_failed` 이벤트로 남길 수 있도록 설계했습니다.
+
+```json
+{
+  "event": "detect_failed",
+  "request_id": "example-request-id",
+  "method": "POST",
+  "path": "/api/v1/detect",
+  "latency_ms": 21.3,
+  "text_length": 5,
+  "error_type": "HTTPException",
+  "error_message": "Internal Server Error during model inference."
+}
+```
+
+실패 상황에서는 모델 결과가 없을 수 있기 때문에 `category`, `confidence`, `action`, `stored` 대신 `error_type`, `error_message`를 남깁니다.
+
+---
+
+### Test Automation
+
+Phase 8에서는 structured logging 유틸인 `log_event()`에 대한 테스트를 추가했습니다.
+
+테스트에서는 `caplog`를 사용해 로그 출력 결과를 캡처하고, 로그 메시지가 JSON으로 파싱 가능한지 검증했습니다.
+
+검증 항목은 다음과 같습니다.
+
+```text
+log_event() 호출 시 로그가 1개 생성되는가?
+로그 메시지가 JSON으로 파싱되는가?
+event 값이 올바른가?
+request_id 값이 올바른가?
+action 값이 올바른가?
+stored 값이 올바른가?
+latency_ms 값이 올바른가?
+```
+
+테스트 결과는 다음과 같습니다.
+
+```text
+18 passed
+```
+
+---
+
+### Result
+
+Phase 8을 통해 기존 API는 다음과 같이 확장되었습니다.
+
+```text
+Before:
+API 응답과 DB 저장은 가능하지만 운영 중 요청 추적이 어려움
+
+After:
+request_id, latency_ms, category, confidence, action, stored 여부를 JSON 로그로 남김
+```
+
+이제 `/detect` 요청이 어떻게 처리되었는지 request 단위로 추적할 수 있으며, 향후 로그 수집 시스템과 연결해 slow request, category 분포, action 비율 등을 분석할 수 있는 기반을 마련했습니다.
+
+---
+
+### Remaining Limitations
+
+현재 structured log는 stdout으로 출력됩니다. 실제 운영 환경에서는 이 stdout 로그를 Docker runtime, cloud logging system, ELK, Loki, Datadog, CloudWatch 같은 로그 수집 시스템이 가져가도록 구성할 수 있습니다.
+
+또한 현재는 `/detect` 중심으로 structured logging을 적용했습니다. 향후에는 `/moderation/records`, `PATCH /moderation/records/{record_id}` 같은 운영자 API에도 structured logging을 확장할 수 있습니다.
+---
 
 ## 10. API
 
