@@ -458,6 +458,258 @@ Key idea:
 
 ---
 
+## Phase 7. Moderation Review Queue
+
+Phase 7에서는 기존 `/api/v1/detect` API가 `allow`, `block`, `review` action을 반환하고 끝나는 구조에서, 실제 운영자가 검토할 수 있는 Review Queue 구조로 확장했습니다.
+
+기존 구조에서는 모델이 `block` 또는 `review`로 판단해도 해당 결과가 저장되지 않았습니다. 따라서 운영자가 어떤 텍스트를 검토해야 하는지, 어떤 요청이 차단되었는지, 오탐 여부를 어떻게 기록할지 알 수 없었습니다.
+
+Phase 7에서는 `block` 또는 `review` 결과를 DB에 저장하고, 운영자가 해당 record를 조회한 뒤 최종 판단을 업데이트할 수 있도록 API를 추가했습니다.
+
+### Motivation
+
+기존 `/detect` API는 다음과 같은 흐름이었습니다.
+
+```text
+Text Input
+  ↓
+POST /api/v1/detect
+  ↓
+HuggingFace Model Inference
+  ↓
+Confidence Policy
+  ↓
+allow / block / review
+  ↓
+Response 반환
+```
+
+하지만 실제 moderation system에서는 `review`나 `block` 결과가 반환된 뒤에도 추가 workflow가 필요합니다.
+
+```text
+review가 나오면 운영자가 어디서 확인하는가?
+block된 기록은 어디에 남는가?
+오탐이면 어떻게 수정하는가?
+운영자 판단 결과를 나중에 threshold 조정이나 모델 개선에 활용할 수 있는가?
+```
+
+이를 해결하기 위해 Phase 7에서는 Review Queue를 추가했습니다.
+
+### Review Queue Flow
+
+```text
+POST /api/v1/detect
+  ↓
+AI Model Inference
+  ↓
+Confidence Policy
+  ↓
+action 결정
+  ├── allow  → 저장하지 않음
+  ├── block  → DB 저장
+  └── review → DB 저장
+  ↓
+moderation_records
+  ↓
+GET /api/v1/moderation/records
+  ↓
+운영자 검토
+  ↓
+PATCH /api/v1/moderation/records/{record_id}
+  ↓
+status = resolved
+```
+
+### Storage Policy
+
+Phase 7에서는 모든 요청을 저장하지 않고, 운영적으로 의미가 있는 `block`과 `review` 결과만 저장합니다.
+
+| Action | DB 저장 여부 | 이유                                     |
+| ------ | -------- | -------------------------------------- |
+| allow  | 저장하지 않음  | 정상으로 판단된 요청이므로 review queue에 쌓을 필요가 없음 |
+| block  | 저장       | 자동 차단 또는 숨김 후보로 운영자 확인 가능              |
+| review | 저장       | 모델 confidence가 애매하므로 운영자 검토 필요         |
+
+`allow` 요청까지 모두 저장하면 DB가 불필요하게 커지고, 운영자가 확인할 필요 없는 데이터가 review queue에 쌓일 수 있습니다. 따라서 MVP 단계에서는 `block`과 `review`만 저장하도록 설계했습니다.
+
+### Database
+
+Phase 7에서는 SQLite와 SQLAlchemy를 사용했습니다.
+
+```text
+SQLite
+- 파일 기반 DB
+- 별도 DB 서버가 필요 없음
+- 로컬 개발과 MVP 검증에 적합
+
+SQLAlchemy
+- Python에서 DB를 다루기 위한 ORM 라이브러리
+- DB table을 Python class로 정의
+- SQLite에서 PostgreSQL로 확장하기 쉬운 구조 제공
+```
+
+현재는 MVP 단계이므로 `moderation.db`라는 SQLite 파일에 데이터를 저장합니다.
+
+실제 운영 환경으로 확장한다면 PostgreSQL과 Docker Compose 기반으로 DB를 분리할 계획입니다.
+
+### moderation_records Table
+
+Phase 7에서 추가한 핵심 테이블은 `moderation_records`입니다.
+
+| Field          | Meaning              |
+| -------------- | -------------------- |
+| id             | record 고유 ID         |
+| text           | 검토 대상 텍스트            |
+| is_hate_speech | 모델의 유해 표현 판단 여부      |
+| category       | 모델이 선택한 top category |
+| confidence     | 모델 confidence score  |
+| action         | block 또는 review      |
+| status         | pending 또는 resolved  |
+| review_result  | 운영자의 최종 판단           |
+| review_note    | 운영자 검토 메모            |
+| created_at     | 생성 시간                |
+| updated_at     | 수정 시간                |
+
+### Status and Review Result
+
+`status`와 `review_result`는 서로 다른 의미를 가집니다.
+
+```text
+status
+- 검토 진행 상태
+- pending: 아직 운영자가 검토하지 않음
+- resolved: 운영자가 검토 완료
+
+review_result
+- 운영자의 최종 판단 결과
+- confirmed_harmful: 실제 유해 표현으로 확인
+- false_positive: 모델 오탐으로 판단
+- clean: 정상 표현으로 판단
+```
+
+예를 들어 처음 저장된 record는 다음과 같습니다.
+
+```json
+{
+  "status": "pending",
+  "review_result": null,
+  "review_note": null
+}
+```
+
+운영자가 검토를 완료하면 다음과 같이 변경됩니다.
+
+```json
+{
+  "status": "resolved",
+  "review_result": "confirmed_harmful",
+  "review_note": "운영자 검토 결과 유해 표현으로 판단됨"
+}
+```
+
+### Added APIs
+
+Phase 7에서 다음 API를 추가했습니다.
+
+#### Get moderation records
+
+```http
+GET /api/v1/moderation/records
+```
+
+저장된 moderation record 목록을 조회합니다.
+
+Query parameter를 통해 `status`, `action`, `limit` 기준으로 필터링할 수 있습니다.
+
+Example:
+
+```http
+GET /api/v1/moderation/records?status=pending&limit=20
+```
+
+#### Get moderation record detail
+
+```http
+GET /api/v1/moderation/records/{record_id}
+```
+
+특정 moderation record의 상세 정보를 조회합니다.
+
+#### Update moderation review
+
+```http
+PATCH /api/v1/moderation/records/{record_id}
+```
+
+운영자의 최종 검토 결과를 저장합니다.
+
+Request:
+
+```json
+{
+  "review_result": "confirmed_harmful",
+  "review_note": "운영자 검토 결과 유해 표현으로 판단됨"
+}
+```
+
+Response:
+
+```json
+{
+  "id": 1,
+  "status": "resolved",
+  "review_result": "confirmed_harmful",
+  "review_note": "운영자 검토 결과 유해 표현으로 판단됨"
+}
+```
+
+PATCH를 사용한 이유는 기존 record 전체를 교체하는 것이 아니라, `status`, `review_result`, `review_note` 같은 일부 필드만 수정하기 때문입니다.
+
+### Test Automation
+
+Phase 7에서는 Review Queue workflow를 pytest로 자동화했습니다.
+
+추가한 테스트는 다음과 같습니다.
+
+| Test                   | Purpose                          |
+| ---------------------- | -------------------------------- |
+| allow 결과는 저장하지 않음      | 정상 텍스트가 review queue에 쌓이지 않는지 검증 |
+| block 결과는 pending으로 저장 | 유해 텍스트가 DB에 저장되는지 검증             |
+| record 상세 조회           | 특정 moderation record 조회 검증       |
+| PATCH 후 resolved 처리    | 운영자 검토 완료 workflow 검증            |
+| 존재하지 않는 record 조회      | 404 응답 검증                        |
+
+테스트에서는 실제 HuggingFace 모델을 호출하지 않고 `FakeModerationModel`을 사용했습니다. 테스트 목적은 모델 성능 검증이 아니라, 모델이 `allow`, `block`, `review` 결과를 반환했을 때 DB workflow가 올바르게 동작하는지 검증하는 것이기 때문입니다.
+
+또한 실제 `moderation.db` 파일을 사용하지 않고 `sqlite:///:memory:` 기반 인메모리 SQLite DB를 사용했습니다. 이를 통해 테스트가 실제 로컬 DB 상태에 영향을 받지 않고, 매번 깨끗한 DB에서 독립적으로 실행되도록 했습니다.
+
+Test result:
+
+```text
+17 passed
+```
+
+### Key Result
+
+Phase 7을 통해 기존 AI model serving API는 다음과 같이 확장되었습니다.
+
+```text
+Before:
+AI 모델 추론 결과 반환
+
+After:
+AI 모델 추론 결과 반환
++ block/review 결과 저장
++ 운영자 검토 목록 조회
++ 운영자 최종 판단 업데이트
++ 테스트 자동화
+```
+
+이를 통해 단순 모델 서빙 API에서 운영 가능한 AI moderation backend로 한 단계 확장했습니다.
+---
+
+
+
 ## 10. API
 
 ### Health Check

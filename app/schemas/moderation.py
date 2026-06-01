@@ -1,10 +1,12 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ModerationRecordResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     text: str
     is_hate_speech: bool
@@ -16,9 +18,6 @@ class ModerationRecordResponse(BaseModel):
     review_note: str | None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class ModerationReviewUpdateRequest(BaseModel):
@@ -34,10 +33,9 @@ class ModerationReviewUpdateRequest(BaseModel):
 
 
 class ModerationReviewUpdateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     status: str
     review_result: str
     review_note: str | None
-
-    class Config:
-        from_attributes = True

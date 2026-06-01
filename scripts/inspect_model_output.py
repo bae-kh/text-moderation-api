@@ -1,23 +1,8 @@
-from typing import Any
-
 from transformers import pipeline
 
+
 MODEL_NAME = "smilegate-ai/kor_unsmile"
-
-
-def normalize_results(results: Any) -> list[dict[str, Any]]:
-    """
-    transformers pipeline 결과 구조가 버전에 따라
-    flat list 또는 nested list로 나올 수 있어 이를 정규화한다.
-    """
-    if isinstance(results, list) and len(results) > 0:
-        if isinstance(results[0], dict):
-            return results
-
-        if isinstance(results[0], list):
-            return results[0]
-
-    raise ValueError(f"Unexpected pipeline output format: {results}")
+MODEL_MAX_TOKENS = 256
 
 
 def main() -> None:
@@ -25,7 +10,7 @@ def main() -> None:
         "text-classification",
         model=MODEL_NAME,
         top_k=None,
-        function_to_apply="sigmoid",
+        function_to_apply="softmax",
     )
 
     texts = [
@@ -34,21 +19,20 @@ def main() -> None:
         "바보같아",
         "아쉽게 생겼네",
         "바보같은놈",
-        "병신같은놈 나가죽어 왤케 못생겼어 이거 완전 미친놈이잖아",
-        "야 이 씹새끼야 뭐하냐 나가 죽어라"
     ]
 
     for text in texts:
         print("=" * 80)
         print("TEXT:", text)
 
-        raw_results = classifier(
+        results = classifier(
             text,
             truncation=True,
-            max_length=256,
+            max_length=MODEL_MAX_TOKENS,
         )
 
-        results = normalize_results(raw_results)
+        if isinstance(results, list) and len(results) > 0 and isinstance(results[0], list):
+            results = results[0]
 
         sorted_results = sorted(
             results,
