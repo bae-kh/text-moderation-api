@@ -6,3 +6,6 @@ load_test_results/*.csv
 # SQLite runtime database
 moderation.db
 *.db
+
+# Environment variables
+.env

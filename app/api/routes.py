@@ -1,24 +1,36 @@
-from fastapi import APIRouter, Request
-from app.schemas.payload import DetectRequest, DetectResponse
-from app.services.model import HateSpeechModel
-from starlette.concurrency import run_in_threadpool
-from fastapi import Depends
-from sqlalchemy.orm import Session
 import logging
 import time
 
+from fastapi import APIRouter, HTTPException, Request, Depends
+from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
+
+from app.core.exceptions import ModelInferenceError
 from app.core.logging import log_event
-from app.db.database import get_db
+from app.db.database import check_db_connection, get_db
+from app.schemas.payload import DetectRequest, DetectResponse
+from app.services.model import HateSpeechModel
 from app.services.moderation_store import create_moderation_record
 
 router = APIRouter()
 
+
 @router.get("/health")
-async def health_check() -> dict:
+async def health_check(request: Request) -> dict:
+    model_loaded = (
+        hasattr(request.app.state, "model")
+        and request.app.state.model is not None
+        and getattr(request.app.state.model, "is_loaded", False)
+    )
+
+    db_connected = check_db_connection()
+
     return {
         "status": "ok",
-        "message": "API server is running"
+        "model_loaded": model_loaded,
+        "db_connected": db_connected,
     }
+
 
 @router.post("/detect", response_model=DetectResponse)
 async def detect_text(
@@ -65,6 +77,29 @@ async def detect_text(
             category=result["category"],
             action=result["action"],
             message=result["message"],
+        )
+
+    except ModelInferenceError as e:
+        latency_ms = round(
+            (time.perf_counter() - start_time) * 1000,
+            2,
+        )
+
+        log_event(
+            event="detect_failed",
+            level=logging.ERROR,
+            request_id=request_id,
+            method=fastapi_req.method,
+            path=str(fastapi_req.url.path),
+            latency_ms=latency_ms,
+            text_length=len(request.text),
+            error_type=type(e).__name__,
+            error_message=str(e),
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Internal Server Error during model inference.",
         )
 
     except Exception as e:

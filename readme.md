@@ -255,15 +255,27 @@ Moderation System
 app/
 ├── main.py
 ├── api/
-│   └── routes.py
+│   ├── routes.py
+│   └── moderation.py
+├── core/
+│   ├── config.py
+│   ├── exceptions.py
+│   └── logging.py
+├── db/
+│   ├── database.py
+│   └── models.py
 ├── schemas/
-│   └── payload.py
+│   ├── payload.py
+│   └── moderation.py
 └── services/
-    └── model.py
+    ├── model.py
+    └── moderation_store.py
 
 tests/
 ├── test_api.py
-└── test_model.py
+├── test_model.py
+├── test_moderation.py
+└── test_logging.py
 
 scripts/
 ├── inspect_model_output.py
@@ -287,6 +299,8 @@ load_test_results/
 
 Dockerfile
 .dockerignore
+.env.example
+.gitignore
 requirements.txt
 requirements-dev.txt
 README.md

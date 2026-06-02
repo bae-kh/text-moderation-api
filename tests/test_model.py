@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import HTTPException
 
+from app.core.exceptions import ModelInferenceError
 from app.services.model import HateSpeechModel
 
 
@@ -79,15 +80,12 @@ def test_model_predict_clean_low_confidence_requires_review() -> None:
     assert result["message"] == "Message requires human review."
 
 
-def test_model_predict_runtime_error_triggers_500() -> None:
+def test_model_predict_runtime_error_raises_model_inference_error() -> None:
     model = HateSpeechModel()
     model.pipeline = MagicMock(side_effect=RuntimeError("CPU inference error"))
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ModelInferenceError):
         model.predict("긴 텍스트")
-
-    assert exc_info.value.status_code == 500
-    assert exc_info.value.detail == "Internal Server Error during model inference."
 
 def test_model_predict_multi_label_output_blocks() -> None:
     model = HateSpeechModel()

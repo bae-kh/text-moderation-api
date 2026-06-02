@@ -13,6 +13,10 @@ class FakeHateSpeechModel:
     def unload(self) -> None:
         pass
 
+    @property
+    def is_loaded(self) -> bool:
+        return True
+
     def predict(self, text: str) -> dict[str, Any]:
         return {
             "is_hate_speech": False,
@@ -29,7 +33,12 @@ def test_health_check(mock_model: Any) -> None:
         response = client.get("/api/v1/health")
 
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+
+    data = response.json()
+
+    assert data["status"] == "ok"
+    assert "model_loaded" in data
+    assert "db_connected" in data
     assert "x-request-id" in response.headers
     assert len(response.headers["x-request-id"]) > 0
 

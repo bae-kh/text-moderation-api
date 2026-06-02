@@ -1,9 +1,13 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class ModerationRecord(Base):
@@ -24,12 +28,12 @@ class ModerationRecord(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow,
+        default=_utc_now,
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=_utc_now,
+        onupdate=_utc_now,
         nullable=False,
     )

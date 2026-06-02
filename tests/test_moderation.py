@@ -15,6 +15,10 @@ class FakeModerationModel:
     def __init__(self, result: dict[str, Any]) -> None:
         self.result = result
 
+    @property
+    def is_loaded(self) -> bool:
+        return True
+
     def predict(self, text: str) -> dict[str, Any]:
         return self.result
 
