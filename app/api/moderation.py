@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core.security import verify_admin_api_key
 from app.db.database import get_db
 from app.schemas.moderation import (
+    ModerationRecordListResponse,
     ModerationRecordResponse,
     ModerationReviewUpdateRequest,
     ModerationReviewUpdateResponse,
@@ -18,19 +20,31 @@ router = APIRouter()
 
 @router.get(
     "/moderation/records",
-    response_model=list[ModerationRecordResponse],
+    response_model=ModerationRecordListResponse,
 )
 def get_records(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     status: str | None = Query(default=None),
     action: str | None = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=100),
+    category: str | None = Query(default=None),
     db: Session = Depends(get_db),
-) -> list[ModerationRecordResponse]:
-    return list_moderation_records(
+    _: None = Depends(verify_admin_api_key),
+) -> ModerationRecordListResponse:
+    items, total = list_moderation_records(
         db=db,
         status=status,
         action=action,
+        category=category,
         limit=limit,
+        offset=offset,
+    )
+
+    return ModerationRecordListResponse(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
     )
 
 
@@ -41,6 +55,7 @@ def get_records(
 def get_record(
     record_id: int,
     db: Session = Depends(get_db),
+    _: None = Depends(verify_admin_api_key),
 ) -> ModerationRecordResponse:
     record = get_moderation_record(db=db, record_id=record_id)
 
@@ -61,6 +76,7 @@ def update_record_review(
     record_id: int,
     payload: ModerationReviewUpdateRequest,
     db: Session = Depends(get_db),
+    _: None = Depends(verify_admin_api_key),
 ) -> ModerationReviewUpdateResponse:
     record = get_moderation_record(db=db, record_id=record_id)
 

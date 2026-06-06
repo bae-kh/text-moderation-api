@@ -10,7 +10,7 @@ RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 
 COPY requirements.txt .
 
-RUN python -m pip install --upgrade pip setuptools wheel
+RUN python -m pip install "pip==24.3.1" setuptools wheel
 
 RUN python -m pip install --no-cache-dir --no-compile \
     "https://download.pytorch.org/whl/cpu/torch-2.2.2%2Bcpu-cp311-cp311-linux_x86_64.whl"

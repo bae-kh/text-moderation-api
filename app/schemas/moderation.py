@@ -39,3 +39,10 @@ class ModerationReviewUpdateResponse(BaseModel):
     status: str
     review_result: str
     review_note: str | None
+
+
+class ModerationRecordListResponse(BaseModel):
+    items: list[ModerationRecordResponse]
+    total: int
+    limit: int
+    offset: int

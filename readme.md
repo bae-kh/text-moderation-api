@@ -260,7 +260,8 @@ app/
 ├── core/
 │   ├── config.py
 │   ├── exceptions.py
-│   └── logging.py
+│   ├── logging.py
+│   └── security.py
 ├── db/
 │   ├── database.py
 │   └── models.py
@@ -298,6 +299,7 @@ load_test_results/
     └── model-smoke-test.yml
 
 Dockerfile
+docker-compose.yml
 .dockerignore
 .env.example
 .gitignore
@@ -1188,7 +1190,71 @@ Invoke-RestMethod `
 
 ---
 
-## 13. Test
+## 13. Run with Docker Compose (PostgreSQL)
+
+Docker Compose를 사용하면 FastAPI 서버와 PostgreSQL DB를 함께 실행할 수 있습니다.
+
+기존 Docker 단독 실행은 SQLite를 사용하지만, Docker Compose는 PostgreSQL을 사용합니다.
+
+```text
+docker run (단독)
+→ SQLite 사용
+→ 단일 컨테이너
+
+docker compose up
+→ PostgreSQL 사용
+→ API 서버 + DB 서버 2개 컨테이너
+```
+
+Start:
+
+```bash
+docker compose up --build
+```
+
+PostgreSQL이 먼저 시작되고, health check를 통과한 뒤 API 서버가 시작됩니다.
+
+모델 최초 로딩에 시간이 걸릴 수 있습니다. HuggingFace 모델 캐시는 Docker volume에 저장되므로 두 번째 실행부터는 빠릅니다.
+
+Health check:
+
+```bash
+curl http://localhost:8000/api/v1/health
+```
+
+Expected:
+
+```json
+{
+  "status": "ok",
+  "model_loaded": true,
+  "db_connected": true
+}
+```
+
+Detect:
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/detect" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"신고된 댓글 예시입니다."}'
+```
+
+Stop:
+
+```bash
+docker compose down
+```
+
+데이터를 포함하여 완전히 초기화하려면:
+
+```bash
+docker compose down -v
+```
+
+---
+
+## 14. Test
 
 Run tests locally:
 

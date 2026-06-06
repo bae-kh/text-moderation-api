@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
+    # Admin API key
+    admin_api_key: str = "dev-admin-key"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

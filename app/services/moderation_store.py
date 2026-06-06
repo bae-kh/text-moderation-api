@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import ModerationRecord
@@ -37,19 +37,47 @@ def list_moderation_records(
     db: Session,
     status: str | None = None,
     action: str | None = None,
+    category: str | None = None,
     limit: int = 20,
-) -> list[ModerationRecord]:
-    statement = select(ModerationRecord).order_by(ModerationRecord.created_at.desc())
+    offset: int = 0,
+) -> tuple[list[ModerationRecord], int]:
+    """
+    pagination과 filter를 지원하는 moderation records 조회.
+
+    Returns:
+        (items, total) 튜플
+    """
+    # 기본 필터 조건 구성
+    filters = []
 
     if status:
-        statement = statement.where(ModerationRecord.status == status)
+        filters.append(ModerationRecord.status == status)
 
     if action:
-        statement = statement.where(ModerationRecord.action == action)
+        filters.append(ModerationRecord.action == action)
 
-    statement = statement.limit(limit)
+    if category:
+        filters.append(ModerationRecord.category == category)
 
-    return list(db.scalars(statement).all())
+    # count 쿼리
+    count_stmt = select(func.count()).select_from(ModerationRecord)
+    for f in filters:
+        count_stmt = count_stmt.where(f)
+    total = db.scalar(count_stmt) or 0
+
+    # items 쿼리
+    items_stmt = select(ModerationRecord)
+    for f in filters:
+        items_stmt = items_stmt.where(f)
+    items_stmt = (
+        items_stmt
+        .order_by(ModerationRecord.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    items = list(db.scalars(items_stmt).all())
+
+    return items, total
 
 
 def get_moderation_record(
