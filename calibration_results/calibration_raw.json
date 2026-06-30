@@ -1,0 +1,442 @@
+{
+  "generated_at": "2026-06-10T12:02:48.106842+00:00",
+  "model": "smilegate-ai/kor_unsmile",
+  "total_samples": 60,
+  "predictions": [
+    {
+      "text": "오늘 날씨가 정말 좋네요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9874380230903625,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "이 영화 재미있었어요 추천합니다",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.987263023853302,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "맛있는 음식 추천해주세요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9843297600746155,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "주말에 같이 놀러 갈래?",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9815652966499329,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "요즘 운동 시작했는데 재밌어요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9870069026947021,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "이번 시험 잘 봤으면 좋겠다",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9826768040657043,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "오랜만에 가족이랑 외식했어요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9841126799583435,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "새로 나온 책 읽어봤는데 괜찮았어",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9863219261169434,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "올해 목표는 자격증 취득이에요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9856239557266235,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "오늘 커피가 유난히 맛있네요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9855983853340149,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "정말 감사합니다 덕분에 해결됐어요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9862844944000244,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "대단하시네요 응원합니다",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9864098429679871,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "좋은 하루 보내세요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9842643141746521,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "수고하셨습니다 고생 많으셨어요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9817208051681519,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "축하드립니다 멋지세요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9874640703201294,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "이 부분은 좀 아쉬운 것 같아요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9881606101989746,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "저는 생각이 좀 다른데요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9867343902587891,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "이건 별로인 것 같아요 솔직히",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9822346568107605,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "가격 대비 만족스럽지는 않았어요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9866207838058472,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "기대했는데 좀 실망스러웠어요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9827367067337036,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "다음에는 더 좋아지면 좋겠네요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9872022271156311,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "이해는 되지만 동의하기 어렵습니다",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9859082102775574,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "조금 더 노력이 필요할 것 같아요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9882256984710693,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "이번 업데이트 좋은데?",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9842925667762756,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "같이 파티 하실 분 구합니다",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9824187159538269,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "이 아이템 어디서 구하나요?",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9842960834503174,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "초보인데 도와주실 분 계신가요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9856294989585876,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "이번 시즌 메타가 재미없네",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9504981637001038,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "보스 패턴 알려주세요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.6016829013824463,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "수고하셨습니다 다음에 또 해요",
+      "ground_truth": "clean",
+      "predicted_label": "clean",
+      "confidence": 0.9776644110679626,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "바보같은놈 꺼져",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.9766819477081299,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "진짜 멍청하다 니가 뭘 안다고",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.9620402455329895,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "쓰레기같은 인간이네",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.9722483158111572,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "입 다물어 아무것도 모르면서",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.9480350017547607,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "얼굴이 왜 그 모양이야",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.6388963460922241,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "너 같은 애가 왜 살아있냐",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.912792444229126,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "진짜 한심하다 인생 낭비하지 마라",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.9532472491264343,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "병신같이 왜 그래",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.9802164435386658,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "꺼져 다시는 오지 마",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.9405984878540039,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "니가 하는 거 다 쓸모없어",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.9596355557441711,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "여자가 무슨 게임을 해",
+      "ground_truth": "harmful",
+      "predicted_label": "clean",
+      "confidence": 0.8290729522705078,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "남자가 그것도 못하냐",
+      "ground_truth": "harmful",
+      "predicted_label": "clean",
+      "confidence": 0.7769413590431213,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "그 나라 사람들은 다 그래",
+      "ground_truth": "harmful",
+      "predicted_label": "clean",
+      "confidence": 0.9160252809524536,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "늙은이들은 컴퓨터를 왜 만져",
+      "ground_truth": "harmful",
+      "predicted_label": "연령",
+      "confidence": 0.9111606478691101,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "장애인이 뭘 할 수 있겠어",
+      "ground_truth": "harmful",
+      "predicted_label": "clean",
+      "confidence": 0.7649425864219666,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "얼굴 보니까 답 없다",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.9444616436958313,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "존재 자체가 민폐야",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.9739214181900024,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "니 수준에 그게 어울린다",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.8639419674873352,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "어디서 감히 말대꾸야",
+      "ground_truth": "harmful",
+      "predicted_label": "clean",
+      "confidence": 0.9128116965293884,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "눈깔 똑바로 떠",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.8432007431983948,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "한번만 더 그러면 가만 안 둔다",
+      "ground_truth": "harmful",
+      "predicted_label": "clean",
+      "confidence": 0.8826025128364563,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "두고 보자 어디 한번 해봐",
+      "ground_truth": "harmful",
+      "predicted_label": "clean",
+      "confidence": 0.9249839186668396,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "죽고 싶냐 조심해라",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.6638346314430237,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "바보같아 진짜",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.8455647826194763,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "그렇게 살아서 뭐하냐",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.6307823657989502,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "아쉽게 생겼네 진짜",
+      "ground_truth": "harmful",
+      "predicted_label": "clean",
+      "confidence": 0.9774166345596313,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "넌 안 되겠다 포기해",
+      "ground_truth": "harmful",
+      "predicted_label": "악플/욕설",
+      "confidence": 0.8063482046127319,
+      "is_clean_prediction": false
+    },
+    {
+      "text": "그 정도밖에 못하냐",
+      "ground_truth": "harmful",
+      "predicted_label": "clean",
+      "confidence": 0.9635002613067627,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "할 줄 아는 게 없구나",
+      "ground_truth": "harmful",
+      "predicted_label": "clean",
+      "confidence": 0.5053126215934753,
+      "is_clean_prediction": true
+    },
+    {
+      "text": "왜 이렇게 못하니 답답하다",
+      "ground_truth": "harmful",
+      "predicted_label": "clean",
+      "confidence": 0.8768831491470337,
+      "is_clean_prediction": true
+    }
+  ],
+  "current_thresholds": {
+    "clean": 0.8,
+    "harmful": 0.65,
+    "auto_block_precision": 1.0,
+    "auto_block_recall": 0.5666666666666667,
+    "auto_block_f1": 0.7234042553191489,
+    "safety_coverage": 0.7333333333333333,
+    "harmful_allow_rate": 0.26666666666666666,
+    "review_rate": 0.1
+  },
+  "best_f1_combination": {
+    "clean": 0.6,
+    "harmful": 0.5,
+    "f1": 0.7755102040816326
+  }
+}

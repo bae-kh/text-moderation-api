@@ -5,6 +5,7 @@ from typing import Callable, Awaitable, AsyncGenerator
 from fastapi import FastAPI, Request, Response
 from app.api.routes import router as api_router
 from app.services.model import HateSpeechModel
+from app.core.config import get_settings
 from app.db.database import init_db
 from app.api.moderation import router as moderation_router
 
@@ -16,8 +17,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     서버의 시작과 종료 생명주기를 관리합니다. (Lifespan Context Manager)
     """
-    logger.info("Starting up server... Initializing database.")
-    init_db()
+    settings = get_settings()
+
+    # SQLite(로컬/Docker 단독)에서는 create_all로 테이블 생성
+    # PostgreSQL(Docker Compose)에서는 alembic upgrade head가 schema를 관리
+    if settings.database_url.startswith("sqlite"):
+        logger.info("SQLite detected. Creating tables via create_all.")
+        init_db()
+    else:
+        logger.info("Non-SQLite DB detected. Skipping create_all (managed by Alembic).")
     # Startup: 모델을 인스턴스화하고 메모리에 한 번만 적재(Singleton)
     logger.info("Starting up server... Loading AI Model.")
     model = HateSpeechModel()
