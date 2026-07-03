@@ -202,39 +202,39 @@ threshold나 action 정책 적용 전의 순수 모델 분류 정확도입니다
 
 ## 8. 분석 및 결론
 
-현재 threshold (`0.80/0.65`)는 Auto-block F1 기준 **29위** (총 56개 조합 중)입니다.
+현재 threshold(`clean=0.80`, `harmful=0.65`)는 Auto-block F1 기준 최상위 조합은 아닙니다.
+56개 threshold 조합을 비교한 결과, Auto-block F1 최고값은 77.6%였고, 현재 threshold의 F1은 72.3%입니다.
 
-F1 기준 최적 조합은 `clean=0.60/harmful=0.50` 
-(F1=77.6%)이지만, 현재 설정을 기본값으로 유지합니다.
+다만 본 실험은 60건의 소규모 pilot calibration이므로, F1이 더 높은 조합을 곧바로 운영 기본값으로 확정하기에는 한계가 있습니다. 특히 `harmful_block_threshold`를 0.50~0.60으로 낮추면 pilot dataset에서는 Auto-block F1이 77.6%까지 상승했지만, 이는 더 공격적인 자동 차단 정책입니다. 60건의 제한된 clean sample만으로 실제 운영 데이터에서도 false positive가 발생하지 않는다고 일반화하기 어렵습니다.
 
-### 현재 threshold 유지 이유 (운영 목표 기반)
+또한 Auto-block F1만으로 moderation policy를 결정하기는 어렵습니다. Moderation backend에서는 자동 차단 성능뿐 아니라 정상 텍스트 오탐 위험, harmful allow rate, review rate, 운영자 검토 부담을 함께 고려해야 합니다.
+
+따라서 현재 `0.80/0.65` 설정은 최적 threshold라기보다, auto-block을 보수적으로 유지하면서 review queue 기반 운영 흐름을 관찰하기 위한 baseline 정책으로 해석했습니다. 향후 실제 review_result 데이터가 충분히 쌓이면 category별 threshold, harmful allow rate, false positive 비율을 다시 측정해 threshold를 재조정할 계획입니다.
+
+### 현재 threshold 유지 이유
 
 현재 프로젝트의 threshold 선택 기준은 다음과 같습니다.
 
-```text
-1순위: 정상 텍스트를 자동 차단하지 않기 (Auto-block Precision 최대화)
-2순위: Review rate를 너무 높이지 않기 (운영자 부담 억제)
-3순위: Harmful recall / F1 높이기
-```
+- 1순위: 정상 텍스트 자동 차단 위험을 보수적으로 관리하기
+- 2순위: review rate를 과도하게 높이지 않기
+- 3순위: pilot 결과만으로 aggressive block 정책을 바로 기본값으로 확정하지 않기
+- 4순위: 실제 review_result 데이터 기반으로 threshold 재조정하기
 
-F1이 가장 높은 `clean=0.95` 조합은 review rate가 증가합니다.
-현재 `0.80/0.65` 설정은 auto-block precision 100%와 review rate 10%를
-만족하는 보수적인 운영 정책으로 유지합니다.
+현재 `0.80/0.65` 설정은 Auto-block Precision 100.0%, Review Rate 10.0%, Safety Coverage 73.3%를 보이는 보수적 baseline 정책입니다.
+향후 운영 데이터가 축적되면 더 낮은 `harmful_block_threshold` 또는 category별 threshold를 재검토할 수 있습니다.
 
 ### 미탐 분석
 
-모델이 harmful을 clean으로 판단한 사례를 분석하면,
-직접적인 욕설이 없는 차별/비하/위협 표현이 주를 이룹니다.
+모델이 harmful을 clean으로 판단한 사례를 분석하면, 직접적인 욕설이 없는 차별/비하/위협 표현이 주를 이룹니다.
 
-일부 미탐은 clean_threshold를 높여 allow에서 review로 이동시킬 수 있지만,
-모델이 clean으로 강하게 판단하는 경우(confidence > 0.90)는
-threshold 조정만으로 완전히 해결하기 어렵습니다.
-이 유형은 해당 데이터를 보강한 fine-tuning이 필요합니다.
+일부 미탐은 `clean_threshold`를 높여 allow에서 review로 이동시킬 수 있지만, 모델이 clean으로 강하게 판단하는 경우는 threshold 조정만으로 완전히 해결하기 어렵습니다.
+이 유형은 threshold 조정뿐 아니라 데이터 보강, fine-tuning, category별 정책 분리가 필요합니다.
 
 ## 9. 한계 및 향후 개선
 
-- 이 결과는 60건의 소규모 pilot calibration이며, 통계적으로 충분한 운영 검증이 아닙니다
-- 실제 운영에서는 review_result 데이터를 수백~수천 건 축적한 뒤 재측정해야 합니다
-- 테스트 데이터가 실제 신고 데이터 분포를 대표하지 않을 수 있습니다
-- 모델 자체의 한계: 직접 욕설이 없는 차별/비하/위협 표현에 약함
-- category별 세분화된 threshold 검토 가능 (예: 욕설 vs 차별 vs 위협)
+- 본 결과는 60건의 소규모 pilot calibration이며, 통계적으로 충분한 운영 검증은 아닙니다.
+- 실제 운영에서는 review_result 데이터를 수백~수천 건 이상 축적한 뒤 threshold를 재측정해야 합니다.
+- 테스트 데이터가 실제 신고 데이터 분포를 대표하지 않을 수 있습니다.
+- 모델은 직접적인 욕설이 없는 차별/비하/위협 표현에 상대적으로 약한 경향을 보였습니다.
+- 향후 욕설, 차별, 위협 등 category별 세분화된 threshold를 검토할 수 있습니다.
+- 운영 데이터가 축적되면 false positive, harmful allow rate, review rate를 함께 분석해 threshold를 재조정할 계획입니다.

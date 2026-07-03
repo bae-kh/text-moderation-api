@@ -1,13 +1,16 @@
-from fastapi import Header, HTTPException, status
+from fastapi import HTTPException, Security, status
+from fastapi.security import APIKeyHeader
 
 from app.core.config import get_settings
 
 
 settings = get_settings()
 
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
 
 def verify_admin_api_key(
-    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    x_api_key: str | None = Security(api_key_header),
 ) -> None:
     """
     관리자 API 인증을 위한 FastAPI dependency입니다.

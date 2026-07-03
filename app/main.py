@@ -47,7 +47,7 @@ async def add_request_id_header(
     call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
     """
-    대용량 트래픽 환경에서의 추적성 확보를 위한 미들웨어입니다.
+    요청 단위 추적을 위해 request_id를 생성하고 응답 헤더와 로그 컨텍스트에 전달합니다.
     """
     request_id: str = str(uuid.uuid4())
     request.state.request_id = request_id
