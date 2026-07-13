@@ -1,121 +1,168 @@
-# AI Text Moderation Backend (`text-moderation-api`)
+# AI Text Moderation Backend
 
 [![CI](https://github.com/bae-kh/text-moderation-api/actions/workflows/ci.yml/badge.svg)](https://github.com/bae-kh/text-moderation-api/actions/workflows/ci.yml)
 
-한국어 유해 표현 분류 모델(`smilegate-ai/kor_unsmile`)을 FastAPI 기반 API로 서빙하고, confidence threshold policy에 따라 **allow / block / review** action을 결정하는 AI Model Serving Backend 프로젝트입니다.
+한국어 유해 표현 분류 모델 [`smilegate-ai/kor_unsmile`](https://huggingface.co/smilegate-ai/kor_unsmile)을 FastAPI로 서빙하고, 모델의 `category`와 `confidence`를 서비스 정책으로 변환하는 AI Service Backend 프로젝트입니다.
 
-block/review 결과는 PostgreSQL에 저장되며, 운영자는 Review Queue API를 통해 모델 판단 결과를 조회하고 검토 상태를 수정할 수 있습니다.
+`review`와 `block` 결과는 PostgreSQL에 저장되며, 인증된 Admin API를 통해 운영자가 검토 결과를 조회하고 수정할 수 있습니다.
 
-> 이 프로젝트는 엄격한 의미의 완전한 MLOps 플랫폼은 아닙니다.
-> 학습된 AI 모델을 FastAPI API, PostgreSQL review workflow, Docker Compose, structured logging, CI, performance test, threshold calibration과 연결한 **AI Model Serving Backend + Review Workflow** 포트폴리오입니다.
+## Highlights
 
----
-
-## 1. Project Overview
-
-### Problem
-
-AI 모델은 단순히 추론 코드로 존재하는 것만으로는 서비스가 되기 어렵습니다.
-실제 백엔드 서비스로 사용하려면 API contract, 입력 검증, 모델 로딩 방식, DB 저장, 운영자 검토 workflow, 로그, 테스트, 성능 측정, threshold 정책 관리가 함께 필요합니다.
-
-### Goal
-
-이 프로젝트의 목표는 한국어 유해 표현 분류 모델을 단순 추론 코드가 아니라, 다음 요소를 갖춘 백엔드 서비스 형태로 확장하는 것입니다.
-
-- FastAPI 기반 model serving API
-- allow / block / review action policy
-- PostgreSQL 기반 review queue
-- X-API-Key 기반 관리자 API 보호
+- FastAPI lifespan 기반 모델 1회 로딩
+- Pydantic 기반 입력 검증과 두 단계 길이 정책
+- `run_in_threadpool` 기반 동기 추론 격리
+- `allow / review / block` confidence policy
+- PostgreSQL review queue와 Alembic migration
+- X-API-Key 기반 Admin API
 - Docker Compose 기반 API + DB 실행 환경
-- structured JSON logging
-- GitHub Actions CI / runtime smoke test
-- latency / load / stress test
-- threshold calibration report
+- GitHub Actions CI와 runtime health smoke test
+- request ID 기반 structured JSON logging
+- Locust scenario/stress test와 service pivot
+- 60건 pilot dataset 기반 56개 threshold 조합 비교
 
 ---
 
-## 2. Key Features
+## 1. Problem
 
-| Area | Description |
-|---|---|
-| Model Serving | HuggingFace `smilegate-ai/kor_unsmile` 모델을 FastAPI API로 서빙 |
-| API Contract | Pydantic 기반 request/response schema 및 입력 검증 |
-| Model Lifecycle | FastAPI lifespan에서 모델 1회 로딩 후 `app.state.model`로 재사용 |
-| Async Handling | 동기 HuggingFace pipeline 추론을 `run_in_threadpool`로 분리 |
-| Action Policy | confidence threshold 기반 `allow` / `block` / `review` 분기 |
-| Review Workflow | block/review 결과를 PostgreSQL에 저장하고 운영자 검토 API 제공 |
-| Admin Auth | X-API-Key 기반 관리자 API 보호, 401/403 구분 |
-| DB / Migration | SQLAlchemy + PostgreSQL + Alembic migration |
-| Runtime | Docker Compose 기반 API + PostgreSQL 2-container 구성 |
-| Logging | `request_id`, `latency_ms`, `action`, `text_length` 중심 JSON structured logging |
-| CI / Test | GitHub Actions, pytest, Docker build, runtime smoke test |
-| Performance | Locust 기반 scenario load test / no-wait stress test |
-| Calibration | 60건 pilot dataset으로 56개 threshold 조합 비교 |
+모델을 로컬에서 실행하는 것과 실제 API 서비스로 운영하는 것은 다른 문제입니다.
+
+이 프로젝트에서는 다음 항목을 함께 다뤘습니다.
+
+- 잘못된 입력이 모델 계층까지 전달되지 않도록 validation
+- 요청마다 모델을 다시 로드하지 않는 lifecycle 관리
+- 동기 CPU inference와 FastAPI event loop 분리
+- 모델 출력값을 서비스 action으로 변환하는 policy
+- 검토가 필요한 결과를 저장하는 persistence layer
+- 운영자 검토를 위한 Admin API
+- Docker 기반 실행 환경과 CI
+- latency, RPS, p95, p99를 포함한 성능 측정
+- 민감한 원문을 제외한 structured logging
+- threshold trade-off를 확인하는 pilot calibration
 
 ---
 
-## 3. Architecture
+## 2. Architecture
 
-```text
-Reported Text / Comment
-  ↓
-POST /api/v1/detect
-  ↓
-FastAPI Middleware
-  - X-Request-ID 생성
-  - request latency 측정
-  ↓
-Pydantic Validation
-  - 필드 누락 검증
-  - 빈 문자열 / 공백 문자열 차단
-  - 길이 제한 검증
-  ↓
-HateSpeechModel
-  - smilegate-ai/kor_unsmile
-  - category / confidence 계산
-  ↓
-Confidence Policy
-  ├── clean + confidence >= 0.80      → allow  → response only
-  ├── clean + confidence < 0.80       → review → DB 저장
-  ├── non-clean + confidence >= 0.65  → block  → DB 저장
-  └── non-clean + confidence < 0.65   → review → DB 저장
-  ↓
-PostgreSQL moderation_records
-  - block / review 결과 저장
-  - allow는 저장하지 않음
-  ↓
-Admin Moderation API
-  - X-API-Key 인증
-  - list / detail / patch review result
+```mermaid
+flowchart LR
+    A[Reported Text / Comment] --> B[POST /api/v1/detect]
+    B --> C[Middleware]
+    C --> D[Pydantic Validation]
+    D --> E[HateSpeechModel]
+    E --> F[Category + Confidence]
+    F --> G{Confidence Policy}
+
+    G -->|allow| H[Detect API Response]
+    G -->|review| H
+    G -->|block| H
+
+    G -->|review / block only| I[(PostgreSQL moderation_records)]
+    I --> J[Admin Moderation API]
+    J --> K[Operator Review]
+
+    L[Docker Compose] --- B
+    M[GitHub Actions CI] --- B
+    N[Structured JSON Logging] --- C
+    O[Performance Test] --- E
 ```
 
-Admin API:
-
 ```text
-GET   /api/v1/moderation/records
-GET   /api/v1/moderation/records/{record_id}
-PATCH /api/v1/moderation/records/{record_id}
+Text Input
+→ Pydantic Validation
+→ HateSpeechModel
+→ category / confidence
+→ allow / review / block
+→ Detect API Response
+→ review / block만 PostgreSQL 저장
+→ Admin Review Workflow
 ```
 
 ---
 
-## 4. Quick Start
+## 3. Core Design
 
-### 4.1 Clone
+### 3.1 Model lifecycle
+
+모델은 FastAPI lifespan에서 한 번 로드하고 `app.state.model`에 저장해 요청 간 재사용합니다.
+
+```text
+Application Start
+→ FastAPI Lifespan
+→ HateSpeechModel 1회 로드
+→ app.state.model 저장
+→ 요청 간 동일 인스턴스 재사용
+```
+
+### 3.2 Inference isolation
+
+HuggingFace pipeline은 동기적인 CPU-bound 작업이므로 async endpoint에서 직접 실행하지 않고 threadpool로 분리했습니다.
+
+```python
+result = await run_in_threadpool(model.predict, request.text)
+```
+
+이 방식은 모델 연산을 비동기로 바꾸는 것이 아니라, FastAPI event loop와 동기 inference를 분리하는 목적입니다.
+
+### 3.3 Input policy
+
+```text
+API input
+- 최대 1000 characters
+- 빈 문자열 / 공백 문자열 차단
+
+Model input
+- 최대 256 tokens
+- truncation = True
+```
+
+API 계층의 문자 수 제한과 tokenizer 계층의 token 제한을 별도 방어선으로 구성했습니다.
+
+---
+
+## 4. Confidence Policy
+
+| Top-1 Category | Confidence | Action | DB 저장 |
+|---|---:|---|---|
+| `clean` | `>= 0.80` | `allow` | X |
+| `clean` | `< 0.80` | `review` | O |
+| `non-clean` | `>= 0.65` | `block` | O |
+| `non-clean` | `< 0.65` | `review` | O |
+
+정책 의도:
+
+- `clean` 예측이라도 confidence가 낮으면 자동 허용하지 않음
+- `non-clean` 예측이라도 confidence가 낮으면 바로 차단하지 않음
+- 자동 판단이 어려운 구간을 review queue로 분리
+- `allow`는 응답만 반환하고 `review`와 `block`만 저장
+
+threshold는 `pydantic-settings` 기반 환경변수로 주입할 수 있습니다.
+
+---
+
+## 5. Quick Start
+
+### 5.1 Clone
 
 ```bash
 git clone https://github.com/bae-kh/text-moderation-api.git
 cd text-moderation-api
 ```
 
-### 4.2 Run with Docker Compose
+### 5.2 Environment
+
+```bash
+cp .env.example .env
+```
+
+`.env`에서 관리자 API key와 DB 설정을 확인합니다.
+
+### 5.3 Run with Docker Compose
 
 ```bash
 docker compose up --build
 ```
 
-첫 실행 시 HuggingFace 모델 다운로드로 시간이 걸릴 수 있습니다.
-이후 실행부터는 `hf-cache` volume으로 모델 파일이 캐시됩니다.
+첫 실행 시 HuggingFace 모델 다운로드로 시간이 걸릴 수 있습니다. 이후 실행부터는 model cache volume을 재사용합니다.
 
 Swagger UI:
 
@@ -123,13 +170,13 @@ Swagger UI:
 http://localhost:8000/docs
 ```
 
-### 4.3 Stop
+### 5.4 Stop
 
 ```bash
 docker compose down
 ```
 
-DB 데이터까지 초기화하려면:
+DB volume까지 초기화하려면:
 
 ```bash
 docker compose down -v
@@ -137,15 +184,13 @@ docker compose down -v
 
 ---
 
-## 5. Basic API Check
+## 6. API
 
-### Health Check
+### 6.1 Health
 
 ```bash
 curl http://localhost:8000/api/v1/health
 ```
-
-Expected response:
 
 ```json
 {
@@ -155,15 +200,19 @@ Expected response:
 }
 ```
 
-### Detect Text
+| Field | Description |
+|---|---|
+| `status` | API server status |
+| `model_loaded` | 모델 로딩 여부 |
+| `db_connected` | DB 연결 여부 |
+
+### 6.2 Detect
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/detect \
   -H "Content-Type: application/json" \
   -d '{"text": "오늘 날씨가 정말 좋네요"}'
 ```
-
-Example response:
 
 ```json
 {
@@ -175,72 +224,26 @@ Example response:
 }
 ```
 
-> README에서는 유해 표현 원문 노출을 피하기 위해 정상 텍스트 예시만 제공합니다.
-> block/review 흐름은 테스트 코드, calibration report, 내부 실행 캡처로 검증했습니다.
+README에서는 유해 표현 원문 노출을 피하기 위해 정상 텍스트 예시만 제공합니다.
 
-### Review Queue
+### 6.3 Review Queue
 
 ```bash
-curl http://localhost:8000/api/v1/moderation/records \
-  -H "X-API-Key: docker-admin-key-change-me"
+curl "http://localhost:8000/api/v1/moderation/records?status=pending&limit=20&offset=0" \
+  -H "X-API-Key: <YOUR_ADMIN_API_KEY>"
 ```
 
----
+관리자 API key는 `.env.example`을 참고해 환경변수로 설정합니다.
 
-## 6. API Reference
-
-### Health Check
-
-```http
-GET /api/v1/health
-```
-
-| Field | Description |
-|---|---|
-| `status` | API server status |
-| `model_loaded` | 모델 로딩 여부 |
-| `db_connected` | DB 연결 여부 |
-
----
-
-### Detect
-
-```http
-POST /api/v1/detect
-Content-Type: application/json
-```
-
-Request:
-
-```json
-{
-  "text": "검사할 텍스트"
-}
-```
-
-Response fields:
-
-| Field | Description |
-|---|---|
-| `is_hate_speech` | 모델의 유해 표현 판단 여부 |
-| `confidence` | top category confidence score |
-| `category` | 모델이 선택한 top category |
-| `action` | `allow` / `block` / `review` |
-| `message` | 처리 결과 메시지 |
-
----
-
-### Moderation Records
-
-관리자 API는 `X-API-Key` header가 필요합니다.
+### 6.4 Admin API
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/v1/moderation/records` | 검토 목록 조회, pagination/filter 지원 |
-| GET | `/api/v1/moderation/records/{record_id}` | 단일 record 상세 조회 |
-| PATCH | `/api/v1/moderation/records/{record_id}` | 운영자 검토 결과 저장 |
+| GET | `/api/v1/moderation/records` | 목록 조회, pagination/filter 지원 |
+| GET | `/api/v1/moderation/records/{record_id}` | 상세 조회 |
+| PATCH | `/api/v1/moderation/records/{record_id}` | 운영자 검토 결과 수정 |
 
-PATCH request example:
+PATCH request:
 
 ```json
 {
@@ -253,157 +256,143 @@ Auth error:
 
 | Status | Meaning |
 |---|---|
-| 401 | X-API-Key header 없음 |
-| 403 | X-API-Key 값이 틀림 |
+| `401` | `X-API-Key` header 없음 |
+| `403` | API key 불일치 |
 
 ---
 
-## 7. Confidence Policy
+## 7. Persistence and Migration
 
-| Top-1 Category | Confidence | Action | Meaning |
-|---|---:|---|---|
-| clean | >= 0.80 | allow | 정상으로 판단 |
-| clean | < 0.80 | review | 정상 판단이지만 confidence가 낮아 검토 |
-| non-clean | >= 0.65 | block | 유해 가능성이 높아 자동 차단 후보 |
-| non-clean | < 0.65 | review | 유해 label이지만 confidence가 낮아 검토 |
+`review` 또는 `block` 결과는 PostgreSQL `moderation_records`에 저장합니다. `allow` 결과는 응답만 반환하고 저장하지 않습니다.
 
-threshold 값은 `pydantic-settings` 기반 환경변수로 주입할 수 있습니다.
+| Field | Description |
+|---|---|
+| `id` | record ID |
+| `text` | 운영자 검토 대상 원문 |
+| `category` | top category |
+| `confidence` | confidence score |
+| `action` | `review` / `block` |
+| `status` | `pending` / `resolved` |
+| `review_result` | 운영자 최종 판단 |
+| `review_note` | 운영자 메모 |
+| `created_at`, `updated_at` | 생성·수정 시각 |
 
-현재 값(`clean=0.80`, `harmful=0.65`)은 60건 pilot calibration 결과를 바탕으로 해석한 보수적 baseline 정책입니다.
+PostgreSQL schema 변경은 Alembic revision으로 관리합니다.
 
----
-
-## 8. Project Structure
-
-```text
-app/
-├── main.py                   # FastAPI app + lifespan + middleware
-├── api/
-│   ├── routes.py             # /api/v1/health, /api/v1/detect
-│   └── moderation.py         # /api/v1/moderation/records
-├── core/
-│   ├── config.py             # pydantic-settings 기반 설정
-│   ├── exceptions.py         # domain exception
-│   ├── logging.py            # structured logging
-│   └── security.py           # X-API-Key auth
-├── db/
-│   ├── database.py           # DB connection
-│   └── models.py             # SQLAlchemy models
-├── schemas/
-│   ├── payload.py            # detect request/response schema
-│   └── moderation.py         # moderation record schema
-└── services/
-    ├── model.py              # HateSpeechModel
-    └── moderation_store.py   # DB CRUD
-
-tests/                        # pytest tests
-scripts/                      # latency_check, calibration scripts
-load_tests/                   # Locust load/stress test
-load_test_results/            # performance test results
-calibration_results/          # threshold calibration report + raw data
-.github/workflows/            # CI + model smoke test
-```
+> 원문은 review workflow를 위해 DB에 저장하지만 structured log에는 기록하지 않습니다. 실제 production에서는 encryption, retention, masking, deletion policy가 추가로 필요합니다.
 
 ---
 
-## 9. Implementation Phase Summary
+## 8. Testing and CI
 
-이 프로젝트는 API MVP에서 threshold calibration까지 단계적으로 확장했습니다.
+### Test strategy
 
-| Phase | Topic | Key Point |
+| Test Type | Scope | Tool |
 |---|---|---|
-| 1 | API MVP | 모델 연동 전 API contract와 입력 검증을 먼저 고정 |
-| 2 | Model Serving | lifespan 기반 1회 로딩 + `run_in_threadpool` 분리 |
-| 3 | Dockerization | CPU-only PyTorch + non-root user + `.dockerignore` |
-| 4 | CI | GitHub Actions로 pytest + Docker build 자동 검증 |
-| 5 | Runtime Smoke Test | container 실행 후 `/api/v1/health` 호출 검증 |
-| 6 | Performance Test | Locust로 latency / RPS / failure 측정 |
-| 7 | Review Queue | block/review 결과를 DB에 저장하고 운영자 검토 workflow 구성 |
-| 8 | Structured Logging | request_id, latency_ms, action 중심 JSON log, 원문 미포함 |
-| 8.5 | Config & Code Quality | 설정 외부화 + custom exception으로 계층 책임 분리 |
-| 9 | PostgreSQL + Compose | SQLite MVP에서 PostgreSQL 기반 API+DB 구조로 확장 |
-| 10 | Auth + Pagination | X-API-Key 인증, 401/403 구분, limit/offset + filter |
-| 11 | Alembic Migration | create_all 의존 축소, migration 기반 schema 변경 관리 |
-| 12 | Threshold Calibration | 60건 pilot dataset으로 56개 threshold 조합 비교 |
+| Unit Test | model service, confidence policy | pytest + MagicMock |
+| API Contract | request/response, validation | pytest + TestClient |
+| Auth / Pagination / Filter | Admin API | pytest + TestClient |
+| Docker Build | image build | Docker |
+| Runtime Smoke Test | container + Health API | Docker + curl |
+| Model Smoke Test | 실제 모델 inference | manual workflow |
+| Load Test | scenario/stress | Locust |
 
-상세 Phase 기록:
+최종 자동화 테스트는 **28개가 통과**했습니다.
+
+### CI flow
 
 ```text
-working/02_project_phase_summary.md
+push / pull request
+→ Python setup
+→ dependency install
+→ pytest
+→ Docker image build
+→ container run
+→ GET /api/v1/health
+→ HTTP 200
+→ status == "ok"
+→ model_loaded == true
+→ db_connected == true
 ```
+
+실제 모델 inference를 포함하는 Detect API smoke test는 HuggingFace model loading과 CPU inference 비용이 크기 때문에 manual workflow로 분리했습니다.
 
 ---
 
-## 10. Performance Summary
+## 9. Performance Test
 
-### Test Environment
+### Environment
 
 | Item | Value |
 |---|---|
-| Purpose | 운영 서버 기준 절대 성능이 아니라, 제한된 CPU-only 환경에서 동시 요청 증가에 따른 latency/RPS 변화 확인 |
-| Environment | Local machine |
-| CPU | 13th Gen Intel(R) Core(TM) i9-13900K |
+| Purpose | CPU-only 환경에서 동시 요청 증가에 따른 latency/RPS 변화 확인 |
+| CPU | Intel Core i9-13900K |
 | RAM | 32GB |
-| GPU | 사용하지 않음, CPU-only inference |
+| GPU | 사용하지 않음 |
 | Run mode | local uvicorn |
 | Model | `smilegate-ai/kor_unsmile` |
-| Tools | `latency_check.py`, Locust |
+| Tools | custom latency script, Locust |
 
-### Warm Latency Test
+### Warm latency
 
-| Test | Avg Latency |
-|---|---:|
-| Short text | 약 30ms |
-| Long text | 약 87ms |
+| Input | Avg | Min | Max |
+|---|---:|---:|---:|
+| Short text | 약 30.05ms | 약 16.49ms | 약 53.60ms |
+| Long text | 약 87.19ms | 약 77.83ms | 약 96.63ms |
 
-### Scenario Load Test
+### Scenario load test
 
-`wait_time=1~2s` 조건에서 실제 사용 패턴에 가까운 요청 간격을 둔 테스트입니다.
+요청 후 1~3초 대기를 적용해 신고·댓글 moderation 흐름을 가정했습니다.
 
-| Users | Avg Latency (ms) | p95 (ms) | p99 (ms) | RPS | Failure |
+| Users | Avg | p95 | p99 | RPS | Failure |
 |---:|---:|---:|---:|---:|---:|
-| 1 | 73.89 | 130 | 130 | 0.51 | 0.00% |
-| 5 | 91.96 | 150 | 150 | 2.41 | 0.00% |
-| 10 | 89.60 | 150 | 170 | 4.46 | 0.00% |
-| 20 | 92.91 | 180 | 200 | 8.99 | 0.00% |
+| 1 | 약 73.89ms | 130ms | 130ms | 0.51 | 0% |
+| 5 | 약 91.96ms | 150ms | 150ms | 2.41 | 0% |
+| 10 | 약 89.60ms | 150ms | 170ms | 4.46 | 0% |
+| 20 | **약 92.91ms** | 180ms | 200ms | 8.99 | 0% |
 
-### Stress Test
+### No-wait stress test
 
-`no wait` 조건에서 가능한 한 빠르게 요청을 보내는 압박 테스트입니다.
-
-| Users | Avg Latency (ms) | p95 (ms) | p99 (ms) | RPS | Failure |
+| Users | Avg | p95 | p99 | RPS | Failure |
 |---:|---:|---:|---:|---:|---:|
-| 5 | 77.22 | 82 | 89 | 62.43 | 0.00% |
-| 10 | 190.85 | 220 | 240 | 48.27 | 0.00% |
-| 20 | 398.98 | 500 | 550 | 45.98 | 0.00% |
+| 5 | 약 77.22ms | 82ms | 89ms | 62.43 | 0% |
+| 10 | 약 190.85ms | 220ms | 240ms | 48.27 | 0% |
+| 20 | 약 398.98ms | 500ms | 550ms | 45.98 | 0% |
 
 ### Interpretation
 
-Scenario test에서는 20 users까지 평균 latency 약 93ms, p99 약 200ms, failure 0%로 비교적 안정적인 응답을 보였습니다.
+Scenario test에서는 20 users까지 평균 약 88ms, p99 약 200ms, failure 0%를 확인했습니다.
 
-반면 no-wait stress test에서는 동시 요청 증가에 따라 평균 latency와 p99 latency가 증가하고, RPS가 일정 수준에서 정체되는 것을 확인했습니다. 이는 현재 CPU-only 단일 API 구조에서 모델 추론이 병목으로 작용할 수 있음을 보여줍니다.
-
----
-
-## 11. Pivot Decision
-
-초기 목표는 **실시간 게임 채팅 사전 차단 API**였습니다.
-
-그러나 CPU-only stress test 결과, 동시 요청이 증가할수록 latency가 증가하고 RPS가 정체되는 것을 확인했습니다. 실시간 채팅 사전 차단은 평균 latency뿐 아니라 p95/p99 tail latency, 순간 트래픽, fallback 정책까지 고려해야 합니다.
-
-따라서 현재 구조에서는 대규모 실시간 사전 차단 경로에 직접 넣기보다, **신고 텍스트·댓글 moderation을 보조하고 block/review 결과를 운영자가 검토하는 review queue 기반 moderation backend**가 더 현실적인 1차 타겟이라고 판단했습니다.
-
-이 판단은 실시간 moderation 자체가 불가능하다는 의미가 아닙니다. 향후 ONNX Runtime, quantization, caching, batching, GPU inference 등을 적용한 뒤 실시간 차단 가능성을 다시 평가할 수 있습니다.
+반면 no-wait stress test에서는 동시 요청이 증가하면서 latency가 상승하고 RPS가 5 users 이후 감소했습니다. 현재 CPU-only 단일 API 구조에서 model inference가 병목으로 작동한 결과로 해석했습니다.
 
 ---
 
-## 12. Threshold Calibration
+## 10. Pivot Decision
 
-60건 pilot calibration dataset(clean 30, harmful 30)을 사용해 현재 threshold 정책과 56개 threshold 조합을 비교했습니다.
+초기 목표는 실시간 게임 채팅 사전 차단 API였습니다.
 
-### Current Threshold Performance
+그러나 실시간 차단은 평균 latency뿐 아니라 p95/p99 tail latency, 순간 트래픽, timeout, fallback, 수평 확장까지 함께 고려해야 합니다.
 
-현재 설정:
+현재 CPU-only 구조에서는 신고 텍스트·댓글 moderation과 운영자 review queue가 더 현실적인 1차 target이라고 판단했습니다.
+
+```text
+Before
+- 실시간 게임 채팅 사전 차단
+
+After
+- 신고 텍스트 / 댓글 moderation
+- block / review 결과 운영자 검토
+```
+
+향후 ONNX Runtime, quantization, batching, caching, GPU inference 등을 적용한 뒤 실시간 적용 가능성을 다시 검토할 수 있습니다.
+
+---
+
+## 11. Threshold Calibration
+
+60건 pilot dataset(`clean` 30, `harmful` 30)을 사용해 **56개 threshold 조합**을 비교했습니다.
+
+현재 threshold:
 
 ```text
 clean_allow_threshold = 0.80
@@ -419,43 +408,22 @@ harmful_block_threshold = 0.65
 | Harmful Allow Rate | 26.7% |
 | Review Rate | 10.0% |
 
-### Threshold Selection Criteria
+선택 기준:
 
-```text
-1순위: 정상 텍스트 자동 차단 위험을 보수적으로 관리하기
-2순위: review rate를 과도하게 높이지 않기
-3순위: pilot 결과만으로 aggressive block 정책을 바로 기본값으로 확정하지 않기
-4순위: 실제 review_result 데이터 기반으로 threshold 재조정하기
-```
+1. 정상 텍스트 자동 차단 위험을 보수적으로 관리
+2. review rate를 과도하게 높이지 않음
+3. pilot 결과만으로 aggressive block policy를 확정하지 않음
+4. 실제 review result가 쌓이면 threshold 재조정
 
-현재 threshold는 최적값이 아니라, 정상 텍스트 자동 차단 위험을 보수적으로 관리하면서 review queue 기반 운영 흐름을 관찰하기 위한 baseline 정책입니다.
+현재 값은 production 최적값이 아니라 review workflow를 관찰하기 위한 baseline입니다.
 
-상세 calibration report:
-
-```text
-calibration_results/calibration_report.md
-```
+- [Threshold Calibration Report](./calibration_results/calibration_report.md)
 
 ---
 
-## 13. Testing Strategy
+## 12. Structured Logging
 
-| Test Type | Scope | Tool | Environment |
-|---|---|---|---|
-| Unit Test | model service logic, confidence policy | pytest + MagicMock | local, CI |
-| API Contract Test | request/response schema, validation | pytest + TestClient | local, CI |
-| Auth / Pagination / Filter | 인증, pagination, category filter | pytest + TestClient | local, CI |
-| Docker Build | image build 가능 여부 | docker build | CI |
-| Runtime Smoke Test | container 기동 + `/api/v1/health` 응답 | docker run + curl | CI |
-| Model Smoke Test | 실제 모델 추론 | docker run + `/api/v1/detect` | manual workflow |
-| Scenario Load Test | 실제 사용 패턴 기반 부하 | Locust | local |
-| Stress Test | 최대 동시 요청 압박 | Locust | local |
-
----
-
-## 14. Structured Logging
-
-`/api/v1/detect` 요청마다 JSON structured log를 기록합니다.
+Detect 요청마다 JSON structured log를 기록합니다.
 
 ```json
 {
@@ -475,130 +443,136 @@ calibration_results/calibration_report.md
 
 Logging policy:
 
-- raw text는 로그에 저장하지 않습니다.
-- 로그에는 `text_length`, `category`, `confidence`, `action`, `latency_ms` 등 분석에 필요한 최소 정보만 기록합니다.
-- DB에는 운영자 review를 위해 원문을 저장하되, 외부 유출 가능성이 있는 로그에서는 제외했습니다.
-- `request_id`를 통해 요청 단위 추적이 가능합니다.
+- raw text는 로그에 저장하지 않음
+- `text_length`, `category`, `confidence`, `action`, `latency_ms`만 기록
+- `request_id`를 통해 요청 단위 추적
+- 원문은 review workflow를 위해 DB에만 저장
 
 ---
 
-## 15. Agentic AI Usage
+## 13. Project Structure
 
-Agentic AI는 개발 속도를 높이기 위한 Pair Programming 파트너로 활용했습니다.
+```text
+text-moderation-api/
+├── .github/
+│   └── workflows/              # CI + manual model smoke test
+├── alembic/                    # schema migration revisions
+├── app/
+│   ├── api/                    # health, detect, moderation routes
+│   ├── core/                   # config, security, exceptions, logging
+│   ├── db/                     # DB connection and models
+│   ├── schemas/                # Pydantic schemas
+│   ├── services/               # model and moderation services
+│   └── main.py                 # FastAPI app + lifespan + middleware
+├── assets/                     # screenshots and documentation assets
+├── calibration_results/        # threshold report and raw results
+├── load_test_results/          # performance results
+├── load_tests/                 # Locust scenarios
+├── scripts/                    # inspection and utility scripts
+├── tests/                      # pytest
+├── .dockerignore
+├── .env.example
+├── .gitignore
+├── Dockerfile
+├── alembic.ini
+├── docker-compose.yml
+├── requirements.txt
+├── requirements-dev.txt
+└── README.md
+```
+
+---
+
+## 14. Agentic AI Usage
+
+Agentic AI는 pair programming과 문서화 보조 도구로 사용했습니다.
 
 활용 범위:
 
-- 반복적인 boilerplate 코드 초안 작성 보조
-- 테스트 케이스 아이디어 도출
-- Docker/CI 설정 초안 작성 보조
-- 문서 구조화
-- 디버깅 방향 탐색
-- 성능 테스트 및 threshold 결과 정리 보조
+- boilerplate 초안
+- test case 아이디어
+- Docker/CI 설정 초안
+- debugging 방향 탐색
+- 성능·calibration 결과 정리
+- README와 문서 구조화
 
-직접 판단한 부분:
+직접 판단한 항목:
 
-- 프로젝트 주제 선정
-- allow / block / review action policy
+- `allow / review / block` policy
 - review queue 구조
-- raw text를 로그에 남기지 않는 logging policy
-- 실시간 차단에서 review queue 기반 moderation backend로 피벗한 판단
-- calibration 결과를 보수적 baseline 정책으로 해석한 판단
+- raw text 미로깅
+- 실시간 차단에서 review workflow로의 pivot
+- calibration 결과를 baseline으로 해석한 기준
+- 포트폴리오에서 주장 가능한 범위
 
-AI가 제안한 코드 초안은 검증 없이 반영하지 않았고, pytest, Docker Compose 실행, API 호출, docker logs 확인, DB 저장 확인, calibration 결과 대조를 통해 직접 검증했습니다.
-
----
-
-## 16. Run Locally
-
-Docker Compose 사용을 권장합니다.
-
-로컬 개발 환경에서 실행하려면:
-
-```bash
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-Swagger UI:
-
-```text
-http://localhost:8000/docs
-```
+생성된 코드는 pytest, Docker Compose, API 호출, container log, DB record, Locust 결과로 검증했습니다.
 
 ---
 
-## 17. Test
+## 15. Limitations
 
-```bash
-pip install -r requirements-dev.txt
-pytest -v
-```
-
-`test_model.py`는 `MagicMock`으로 HuggingFace pipeline을 대체합니다.
-실제 모델 추론 검증은 Docker 기반 smoke test 또는 manual model smoke workflow로 수행합니다.
-
----
-
-## 18. Limitations
-
-- 본 프로젝트는 완전한 MLOps 플랫폼이 아닙니다.
-- 모델 학습 파이프라인, model registry, drift monitoring, continuous training은 구현하지 않았습니다.
-- 현재 성능 테스트는 제한된 로컬 CPU-only 환경에서 수행되었습니다.
-- 실시간 게임 채팅 사전 차단 용도로는 추가 최적화가 필요합니다.
-- X-API-Key 인증은 MVP 수준의 관리자 API 보호 방식입니다.
-- Threshold calibration은 60건 pilot dataset 기준이며, 실제 운영 데이터 기반 재측정이 필요합니다.
-- 운영자 검토 UI는 구현하지 않았고, API만 제공합니다.
-- 클라우드 배포는 진행하지 않았습니다.
-- worker/thread tuning과 cold start latency 측정은 향후 과제로 남겼습니다.
+- 완전한 MLOps platform은 아님
+- model registry, drift monitoring, continuous training 미구현
+- 제한된 local CPU-only 환경에서 성능 측정
+- 실시간 대규모 채팅 차단에는 추가 최적화 필요
+- X-API-Key는 MVP 수준의 관리자 인증
+- calibration은 60건 pilot dataset 기준
+- 운영자 UI는 없고 Admin API만 제공
+- cloud deployment 미진행
+- production-grade observability와 개인정보 정책 미구현
 
 ---
 
-## 19. Future Work
+## 16. Future Work
 
-- 운영 데이터 기반 threshold 재측정
-- category별 세분화된 threshold 검토
-- ONNX Runtime 변환
-- dynamic quantization 적용 검토
-- Redis 기반 빈출 텍스트 캐싱
-- batch inference 구조 검토
-- GPU inference 또는 별도 inference service 분리
+- 운영자 review 결과 기반 threshold 재측정
+- category별 threshold
+- ONNX Runtime
+- dynamic quantization
+- Redis caching
+- batch inference
+- GPU inference service
 - worker/thread tuning
-- Prometheus/Grafana 기반 latency/error monitoring
-- 클라우드 배포
-- model registry 또는 모델 버전 관리 도입
+- Prometheus/Grafana
+- model registry
+- cloud deployment
 
 ---
 
-## 20. Troubleshooting
+## 17. Evidence
+
+- [GitHub Actions](https://github.com/bae-kh/text-moderation-api/actions)
+- [Calibration Report](./calibration_results/calibration_report.md)
+- [Load Test Results](./load_test_results/performance_result.png)
+- [Execution Evidence](./assets/detect_response.png)
+
+---
+
+## 18. Troubleshooting
 
 <details>
 <summary>PyTorch CUDA dependency issue</summary>
 
-일반 `torch` dependency를 설치하면 불필요한 CUDA 관련 패키지가 설치될 수 있습니다.
-Dockerfile에서 CPU-only PyTorch wheel을 직접 설치하여 해결했습니다.
+일반 `torch` dependency 설치 시 불필요한 CUDA package가 포함될 수 있어 Dockerfile에서 CPU-only PyTorch wheel을 설치했습니다.
 
 </details>
 
 <details>
 <summary>NumPy runtime compatibility issue</summary>
 
-PyTorch CPU wheel과 최신 NumPy의 호환성 문제로 `numpy==1.26.4`로 고정했습니다.
+PyTorch CPU wheel과 NumPy 호환성 문제로 `numpy==1.26.4`를 고정했습니다.
 
 </details>
 
 <details>
-<summary>Docker API와 inspect script의 추론 결과 불일치</summary>
+<summary>API와 model inspection script 결과 불일치</summary>
 
-inspect script와 API 서버의 HuggingFace pipeline 설정이 달라 confidence 결과가 다르게 나왔습니다.
-API 서버에도 동일한 `softmax` 기반 설정을 적용하여 추론 조건을 일치시켰습니다.
+HuggingFace pipeline 설정이 달라 confidence 값이 다르게 나온 문제를 확인하고, API와 inspection script의 softmax 기반 설정을 일치시켰습니다.
 
 </details>
 
 <details>
-<summary>PowerShell에서 한국어 JSON 요청 인코딩 문제</summary>
-
-PowerShell에서 curl로 한국어 JSON을 보내면 인코딩 문제가 발생할 수 있습니다.
-`Invoke-RestMethod`와 UTF-8 명시적 사용으로 해결했습니다.
+<summary>PowerShell 한국어 JSON 인코딩 문제</summary>
 
 ```powershell
 $body = [System.Text.Encoding]::UTF8.GetBytes('{"text": "검사할 텍스트"}')
