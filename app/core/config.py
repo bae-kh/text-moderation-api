@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # Model
     model_name: str = "smilegate-ai/kor_unsmile"
-    model_max_tokens: int = 512
+    model_max_tokens: int = 256
 
     # Confidence Policy Thresholds
     clean_allow_threshold: float = 0.80
